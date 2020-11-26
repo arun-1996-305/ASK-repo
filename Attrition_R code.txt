@@ -1,0 +1,439 @@
+install.packages('flexclust')
+install.packages('dpylr')
+install.packages('xgboost')
+install.packages('mgrittr')
+install.packages('installr')
+install.packages('Rtools')
+install.packages('tidyverse')
+install.packages('ggplot2')
+install.packages('caTools')
+install.packages('car')
+install.packages('caret')
+install.packages('Rtools')
+install.packages("fastDummies")
+install.packages("gridExtra")
+install.packages("ROCR")
+install.packages("rpart")
+install.packages("psych")
+install.packages("theme_minimal")
+install.packages("grid")
+install.packages("knitr")
+library(knitr)
+library(rpart)
+library(caTools)
+library(car)
+library(ggplot2)
+library(lattice)
+library(caret)
+library(grid)
+library(gridExtra)
+library(fastDummies)
+library(installr)
+updateR()
+df_main<-read.csv(file.choose())
+head(df_main)
+dim(df_main)
+#Structure of dataframe
+str(df_main)
+is.na(df_main)
+#count of missing values
+sum(is.na(df_main))
+summary(df_main)
+#Unique valuesin column
+sapply(df_main, function(x) length(unique(x)))
+
+#Freq of unique values in Attrition column
+table(df_main$Attrition)
+df1 <- df_main
+#convert int variables to ordered factors 
+names <- c('Attrition','BusinessTravel','RelationshipSatisfaction','PerformanceRating', 'WorkLifeBalance', 
+           'JobInvolvement', 'JobSatisfaction', 'JobLevel','JobRole','Department','Education',
+           'EducationField','Gender','MaritalStatus','OverTime','EnvironmentSatisfaction')
+
+#Remove Education,over18,standard hours,employee count,employee number
+df_main[,names] <- lapply(df_main[,names] , factor, ordered = TRUE)
+str(df_main)
+df_main_log <- df_main
+
+#convert age to factor 
+df_main_log$AgeGroup <- as.factor(
+  ifelse(df_main_log$Age<=30,"Young", ifelse(
+    df_main_log$Age<=43,"Middle-Age","Adult"
+  ))
+)
+df_main_log$AgeGroup
+#convert percentSalaryHike to factor 
+df_main_log$PercentSalaryHikeGrouped  <- as.factor(
+  ifelse(df_main_log$PercentSalaryHike<=15,"goodhike", ifelse(
+    df_main_log$PercentSalaryHike <= 20,"betterhike","besthike"
+  ))
+)
+#convert YearsSinceLastPromotion to factor 
+df_main_log$YearsSinceLastPromotionGrouped <- as.factor(
+  ifelse(df_main$YearsSinceLastPromotion<=3,"RecentlyPromoted", ifelse(
+    df_main$YearsSinceLastPromotion <= 7,"PromotedLongBack","PromotedVeryLongBack"
+  ))
+)
+#convert DistanceFromHome to factor 
+df_main_log$DistanceFromHomeGroup <- as.factor(
+  ifelse(df_main_log$DistanceFromHome<=10,"CloserDistance", ifelse(
+    df_main_log$DistanceFromHome <= 20,"MediumDistance","FarDistance"
+    ))
+)
+df_main_log$DistanceFromHomeGroup
+#convert MonthlyIncome 
+df_main_log$MonthlyIncomeGrouped <- as.factor(
+  ifelse(df_main_log$MonthlyIncome <= 2911,"Low", ifelse(
+    df_main_log$MonthlyIncome <= 6503,"Average", ifelse(
+      df_main_log$MonthlyIncome <= 8379,"AboveAverage","High"
+    )))
+)
+#convert  YearsAtCompany
+df_main_log$YrsAtCoGrouped <- as.factor(
+  ifelse(df_main_log$YearsAtCompany <= 3,"LessThan3", ifelse(
+    df_main_log$YearsAtCompany <= 7,"3to7", ifelse(
+      df_main_log$YearsAtCompany <= 10,"7to10","bove10"
+    )))
+)
+#convert YearsWithCurrManager
+df_main_log$YrsWtCurrMngrGrouped <- as.factor(
+  ifelse(df_main_log$YearsWithCurrManager <= 2,"LessThan2", ifelse(
+    df_main_log$YearsWithCurrManager <= 4,"2to4", ifelse(
+      df_main_log$YearsWithCurrManager <= 7,"4to7","bove7"
+    )))
+)
+#convert YearsInCurrentRole
+df_main_log$YrsInCurrRoleGrouped <- as.factor(
+  ifelse(df_main_log$YearsInCurrentRole <= 2,"LessTh2", ifelse(
+    df_main_log$YearsInCurrentRole <= 4,"2to4", ifelse(
+      df_main_log$YearsInCurrentRole <= 7,"4to7","bove7"
+    )))
+) 
+#Remove (over18,standard hours,employee count,employee number) columns as they dont have much impact on Attrition
+df_main_log=df_main_log[,-c(9,10,22,27)]
+
+#Remove the integer columns (YearsInCurrentRole,YearsWithCurrManager,YearsAtCompany,MonthlyIncome,
+#DistanceFromHome,YearsSinceLastPromotion,percentSalaryHike,Age) as they are already grouped
+df_main_log=df_main_log[,-c(1,6,17,21,28,29,30,31)]
+
+#Converting StockOptionLevel & TrainingTimesLastYear into factors
+df_main_log$StockOptionLevel = as.factor(df_main_log$StockOptionLevel)
+df_main_log$TrainingTimesLastYear = as.factor(df_main_log$TrainingTimesLastYear)
+dim(df_main_log)
+#check for missing values
+colSums(is.na(df_main_log)) 
+
+#Converting ordered factor to Factors
+df_main_log[,names] <- lapply(df_main[,names] , factor, ordered = FALSE)
+
+df_main_models <- df_main_log
+dim(df_main_models)
+str(df_main_models)
+
+Categorical=names(which(sapply(df_main_log, class) == "factor"))
+Categorical
+df_main_log_categorical = df_main_log[,c(Categorical)]
+dim(df_main_log_categorical)
+
+Numerical=names(which(sapply(df_main_log, class) == "integer"))
+Numerical
+df_main_log_numerical = df_main_log[,c(Numerical)]
+dim(df_main_log_numerical)
+
+Categorical_final=df_main_log_categorical
+
+Categorical_final<- fastDummies::dummy_cols(Categorical_final)
+names(Categorical_final)
+Categorical_final=Categorical_final[-c(1:26)] #Remove Raw Variables
+names(Categorical_final)
+dim(Categorical_final)
+names(Categorical_final) <- gsub(" ", "", names(Categorical_final))
+names(Categorical_final) <- gsub("-", "", names(Categorical_final))
+names(Categorical_final) <- gsub("&", "", names(Categorical_final))
+
+
+Data_Prep_Final=cbind(df_main_log_numerical,Categorical_final)
+Data_Prep_Final$Attrition=df_main_log_categorical$Attrition
+str(Data_Prep_Final)
+
+#sample split
+set.seed(101) # Set Seed so that same sample can be reproduced in future enhancement
+sindex<-sample(2,nrow(Data_Prep_Final),prob=c(0.7,0.3),replace=T)
+train <- Data_Prep_Final[sindex==1,]
+test <- Data_Prep_Final[sindex==2,]
+
+####Logistic Regression#######
+#To view the significance of column jus ran the model
+#logmodel <- glm(Attrition~., family = "binomial", data = train)
+# 26 columns are not defined because of singularities
+logmodel_cols<-names(train)
+str(logmodel_cols)
+
+#Removing the 26 columns which causes correlation among independent variables
+logmodel_cols <- logmodel_cols[-c(7,10,13,18,24,28,30,34,39,48,52,55,57,59,63,67,74,78,81,84,87,91,95,99,106,107)]
+logmodel_cols
+
+#To view the significance of column jus ran the model
+logmodel <- glm(Attrition~DailyRate+HourlyRate+MonthlyRate+NumCompaniesWorked+TotalWorkingYears+BusinessTravel_NonTravel+BusinessTravel_Travel_Frequently+Department_HumanResources+Department_ResearchDevelopment+Education_1+Education_2+Education_3+Education_4+EducationField_HumanResources+EducationField_LifeSciences+EducationField_Marketing+EducationField_Medical+EducationField_Other+EnvironmentSatisfaction_1+EnvironmentSatisfaction_2+EnvironmentSatisfaction_3+Gender_Female+JobInvolvement_1+JobInvolvement_2+JobInvolvement_3+JobLevel_1+JobLevel_2+JobLevel_3+JobLevel_4+JobRole_HealthcareRepresentative+JobRole_HumanResources+JobRole_LaboratoryTechnician+JobRole_Manager+JobRole_ManufacturingDirector+JobRole_ResearchDirector+                     
+                  JobRole_ResearchScientist+JobRole_SalesExecutive+JobSatisfaction_1+JobSatisfaction_2+JobSatisfaction_3+MaritalStatus_Divorced+
+                  MaritalStatus_Married+OverTime_No+PerformanceRating_3+RelationshipSatisfaction_1+RelationshipSatisfaction_2+RelationshipSatisfaction_3+                           
+                  StockOptionLevel_0+StockOptionLevel_1+StockOptionLevel_2+TrainingTimesLastYear_0+TrainingTimesLastYear_1+TrainingTimesLastYear_2+
+                  TrainingTimesLastYear_3+TrainingTimesLastYear_4+TrainingTimesLastYear_5+WorkLifeBalance_1+WorkLifeBalance_2+WorkLifeBalance_3+                        
+                  PercentSalaryHikeGrouped_besthike+PercentSalaryHikeGrouped_betterhike+DistanceFromHomeGroup_CloserDistance+DistanceFromHomeGroup_FarDistance+                
+                  MonthlyIncomeGrouped_AboveAverage+MonthlyIncomeGrouped_Average+MonthlyIncomeGrouped_High+YrsAtCoGrouped_3to7+                     YrsAtCoGrouped_7to10+YrsAtCoGrouped_bove10+YrsWtCurrMngrGrouped_2to4+YrsWtCurrMngrGrouped_4to7+YrsWtCurrMngrGrouped_bove7+YrsInCurrRoleGrouped_2to4+                    YrsInCurrRoleGrouped_4to7+YrsInCurrRoleGrouped_bove7+YearsSinceLastPromotionGrouped_PromotedLongBack+YearsSinceLastPromotionGrouped_PromotedVeryLongBack , family = binomial(link = 'logit'), data = train)
+summary(logmodel)
+car::vif(logmodel)
+#Picked the significant columns and build the Final logistic model for train dataset
+logmodel_final <- glm(Attrition~DailyRate+NumCompaniesWorked+TotalWorkingYears+BusinessTravel_NonTravel+BusinessTravel_Travel_Frequently+
+                      EducationField_LifeSciences+EducationField_Medical+EnvironmentSatisfaction_1+JobInvolvement_1+
+                        JobInvolvement_2+JobSatisfaction_1+JobSatisfaction_3+OverTime_No+
+                        RelationshipSatisfaction_1+TrainingTimesLastYear_0+WorkLifeBalance_1+
+                        DistanceFromHomeGroup_CloserDistance+MonthlyIncomeGrouped_Average+YearsSinceLastPromotionGrouped_PromotedLongBack+
+                        YearsSinceLastPromotionGrouped_PromotedVeryLongBack , family = binomial(link = 'logit'), data = train)
+summary(logmodel_final)
+car::vif(logmodel_final)
+
+#Finding Chisquare value and Over dispersion
+logis_null<-glm(Attrition~1, data=train,family=binomial(link='logit'))
+llf<-logLik(logmodel_final)
+llf
+lln<-logLik(logis_null)
+lln
+Chisquarevalue<-2*(llf-lln)
+Chisquarevalue
+qchisq(0.05,7,lower.tail=F)
+overdispersion <- logmodel_final$deviance/logmodel_final$df.residual
+overdispersion
+1-(llf/lln)
+#0.267 means 75% significant
+#Mc Fadden
+exp((-2/nrow(train))*llf)-lln
+install.packages("rcompanion")
+library(rcompanion)
+nagelkerke(logmodel_final)
+
+logi_PredTrain <- predict(logmodel_final, newdata=train, type='response')
+head(logi_PredTrain)
+
+#setting threshold 0.5 to turn probabilities into classification
+logi_trainprednew <- ifelse(logi_PredTrain<0.5,'No','Yes')
+logi_trainprednew <- as.factor(logi_trainprednew)
+logi_trainprednew
+table(logi_trainprednew)
+df<- data.frame(train$Attrition,logi_PredTrain)
+View(df)
+
+conf_logi <- table(Observed=train$Attrition, Predicted=logi_trainprednew)
+conf_logi
+###### Accuracy = TP + TN/ (TP+TN+FP+FN)  i.e all correct/all  #############
+accuracy_logi <- sum(diag(conf_logi))/sum(conf_logi)
+accuracy_logi
+library(caret)
+confusionMatrix(conf_logi)
+
+
+library(ROCR)
+ROCRpred <- prediction(logi_PredTrain, train$Attrition)
+ROCRperf <- performance(ROCRpred, 'tpr','fpr')
+plot(ROCRperf, colorize = TRUE, text.adj = c(-0.2,1.7))
+
+
+
+
+#Model Selection -- TEST dataset 
+logmodel_final_test <- glm(Attrition~DailyRate+NumCompaniesWorked+TotalWorkingYears+BusinessTravel_NonTravel+BusinessTravel_Travel_Frequently+
+                       EducationField_LifeSciences+EducationField_Medical+EnvironmentSatisfaction_1+JobInvolvement_1+
+                       JobInvolvement_2+JobSatisfaction_1+JobSatisfaction_3+OverTime_No+
+                       RelationshipSatisfaction_1+TrainingTimesLastYear_0+WorkLifeBalance_1+
+                       DistanceFromHomeGroup_CloserDistance+MonthlyIncomeGrouped_Average+YearsSinceLastPromotionGrouped_PromotedLongBack+
+                       YearsSinceLastPromotionGrouped_PromotedVeryLongBack , family = binomial(link = 'logit'), data = test)
+summary(logmodel_final_test)
+
+car::vif(logmodel_final_test)
+
+logisTest_null<-glm(Attrition~1, data=test,family=binomial(link='logit'))
+llf_test<-logLik(logmodel_final_test)
+
+lln_test<-logLik(logisTest_null)
+
+Chisquarevalue_test<-2*(llf_test-lln_test)
+
+qchisq(0.05,7,lower.tail=F)
+overdispersion_test <- logmodel_final_test$deviance/logmodel_final_test$df.residual
+overdispersion_test
+1-(llf_test/lln_test)
+#0.364 means 65% significant
+#Mc Fadden
+exp((-2/nrow(test))*llf_test)-lln_test
+install.packages("rcompanion")
+library(rcompanion)
+nagelkerke(logmodel_final_test)
+
+logi_PredTest <- predict(logmodel_final_test, newdata=test, type='response')
+head(logi_PredTest)
+
+#setting threshold 0.5 to turn probabilities into classification
+logi_testprednew <- ifelse(logi_PredTest<0.5,'No','Yes')
+logi_testprednew <- as.factor(logi_testprednew)
+logi_testprednew
+
+
+conf_logiTest <- table(Observed=test$Attrition, Predicted=logi_testprednew)
+Model_GLM <- confusionMatrix(conf_logiTest)
+Model_GLM
+###### Accuracy = TP + TN/ (TP+TN+FP+FN)  i.e all correct/all  #############
+accuracy_logiTest <- sum(diag(conf_logi))/sum(conf_logi)
+accuracy_logiTest
+library(caret)
+confusionMatrix(test$Attrition,logi_testprednew)
+
+GLM_ROC <- plot.roc(as.numeric(test$Attrition), as.numeric(logi_testprednew),lwd=4, type="b",grid.lty=3, grid=TRUE, print.auc=TRUE,print.auc.col= "#386CB0", col ="#F0027F", main ="GLM Model")
+GLM_ROC 
+
+library(ROCR)
+ROCRpredTest <- prediction(logi_PredTest, test$Attrition)
+ROCRperfTest <- performance(ROCRpredTest, 'tpr','fpr')
+plot(ROCRperfTest, colorize = TRUE, text.adj = c(-0.2,1.7))
+
+
+
+###Splitting into train & test for further models
+set.seed(100)
+sindex<-sample(2,nrow(df_main_models),prob=c(0.7,0.3),replace=T)
+train <- df_main_models[sindex==1,]
+test <- df_main_models[sindex==2,]
+
+####RandomForest#######
+library(lattice)
+library(caret)
+library(randomForest)
+
+
+modelRF <- train(Attrition~.,data = train,method = 'rf',trControl = trainControl(method = 'cv',number = 10)) 
+
+summary(modelRF)
+modelRF
+
+PredTrain_RF <- predict(modelRF, newdata=train)
+PredTest_RF <- predict(modelRF, newdata=test)
+
+head(PredTrain_RF)
+
+model_RF <- confusionMatrix(PredTest_RF,test$Attrition)
+model_RF
+plot(modelRF)
+library(pROC)
+RFModel_ROC <- plot.roc(as.numeric(test$Attrition), as.numeric(PredTest_RF),lwd=4, type="b",grid.lty=3, grid=TRUE, print.auc=TRUE,print.auc.col= "#FF7F00", col ="#377EB8", main ="Tenure Based on Department")
+
+
+####Decision Tree#######
+#fit the model
+
+
+library(psych)
+library(rpart)
+
+
+Model_rpart <- train(Attrition ~.,train,method = 'rpart', trControl = trainControl(method = 'cv',number = 3)) # A simple Decision Tree
+Model_rpart
+#84%
+
+PredTrain_Dtree <- predict(Model_rpart,newdata = train ) 
+PredTest_Dtree <- predict(Model_rpart,newdata = test ) 
+
+
+confusionMatrix(PredTrain_Dtree,train$Attrition) #84%
+Model_DT <- confusionMatrix(PredTest_Dtree,test$Attrition) #81%
+Model_DT
+
+########XG Boost#############
+library(caret)
+library(plyr)
+library(xgboost)
+
+seeds <- set.seed(010)
+
+#Define control parameters for train function
+fitControl <- trainControl(method="cv", number = 10, classProbs = TRUE, seeds = seeds)
+
+#Build the model and predict
+XGBModel <- train(Attrition~., data = train, method = "xgbTree", 
+                  trControl = fitControl)
+
+XGBM_pred_train <- predict(XGBModel,train)
+XGBM_pred_test <- predict(XGBModel,test)
+Model_XGB <- confusionMatrix(XGBM_pred_test, test$Attrition)
+Model_XGB
+#Plot 
+XGBModel_ROC <- plot.roc (as.numeric(test$Attrition), as.numeric(XGBM_pred_test),lwd=3, 
+                          type="b",grid.lty=2, grid=TRUE, print.auc=TRUE,print.auc.col= "#1B9E77", col ="#1B9E77", main ="eXtreme Gradient Boosting")
+
+########SVM#############
+
+SVMModel <- train(Attrition~.,train,method = 'svmRadial',trControl = trainControl(method = 'repeatedcv',number = 3))
+#Predict
+SVM_pred_train <- predict(SVMModel,train)
+SVM_pred_test <- predict(SVMModel,test)
+#Print confusion matrix
+Model_SVM <- confusionMatrix(test$Attrition, SVM_pred_test)
+Model_SVM
+#Plot the ROC curve
+SVM_ROC <- plot.roc (as.numeric(test$Attrition), as.numeric(SVM_pred_test),lwd=3, type="b",grid.lty=3, grid=TRUE, print.auc=TRUE,print.auc.col= "#984EA3", col ="#984EA3" , main ="SVM Model")
+SVM_ROC 
+
+########Naive Baiyes Classifier############
+#Fit the model on train data
+library(e1071)
+NBModel <- naiveBayes(Attrition~., data=train)
+#predict on train set
+NBM_pred_train = predict(NBModel, newdata = train)
+#Validate on test set
+NBM_pred_test = predict(NBModel, newdata = test)
+
+#Print confusion matrix
+Model_NBM<-confusionMatrix(NBM_pred_test, test$Attrition)
+Model_NBM
+#Plot
+NBM_ROC <- plot.roc(as.numeric(test$Attrition), as.numeric(NBM_pred_test),lwd=4, type="b",grid.lty=3, grid=TRUE, print.auc=TRUE,print.auc.col= "#FF7F00", col ="#FF7F00", main ="Naive Bayes")
+NBM_ROC
+
+########K-Nearest Neighbour############
+#Fit the model on train data
+KnnModel <- train(Attrition~.,train,method = 'knn',trControl = trainControl(method = 'repeatedcv',number = 3))
+#Predict with train set
+Knn_pred_train <- predict(KnnModel,train)
+#Predict with test set
+Knn_pred_test <- predict(KnnModel,test)
+#Print confusion matrix
+Model_KNN <- confusionMatrix(test$Attrition, Knn_pred_test)
+Model_KNN
+#Plot the curve
+plot.roc(as.numeric(test$Attrition), as.numeric(Knn_pred_test),lwd=4, type="b",grid.lty=3, grid=TRUE, print.auc=TRUE,print.auc.col= "#BEBADA", col ="#BEBADA", main = "K-Nearest Neighbor")
+
+
+########MODEL SELECTION########
+
+# Extract values from confusion matrixes and create a list for each statistic value and models
+
+Sensitivities <- c(Model_GLM$byClass["Sensitivity"],Model_DT$byClass["Sensitivity"], model_RF$byClass["Sensitivity"], Model_XGB$byClass["Sensitivity"], Model_SVM$byClass["Sensitivity"], Model_NBM$byClass["Sensitivity"], Model_KNN$byClass["Sensitivity"])
+
+Specificities <- c(Model_GLM$byClass["Specificity"],Model_DT$byClass["Specificity"], model_RF$byClass["Specificity"], Model_XGB$byClass["Specificity"], Model_SVM$byClass["Specificity"], Model_NBM$byClass["Specificity"], Model_KNN$byClass["Specificity"])
+
+Precisions <- c(Model_GLM$byClass["Precision"],Model_DT$byClass["Precision"], model_RF$byClass["Precision"], Model_XGB$byClass["Precision"], Model_SVM$byClass["Precision"], Model_NBM$byClass["Precision"], Model_KNN$byClass["Precision"])
+
+Recalls <- c(Model_GLM$byClass["Recall"],Model_DT$byClass["Recall"], model_RF$byClass["Recall"], Model_XGB$byClass["Recall"], Model_SVM$byClass["Recall"], Model_NBM$byClass["Recall"], Model_KNN$byClass["Recall"])
+
+Accuracies <- c(Model_GLM$overall[1],Model_DT$overall[1], model_RF$overall[1], Model_XGB$overall[1], Model_SVM$overall[1], Model_NBM$overall[1], Model_KNN$overall[1])
+
+Balanced_Accuracies <- c(Model_GLM$byClass["Balanced Accuracy"],Model_DT$byClass["Balanced Accuracy"], model_RF$byClass["Balanced Accuracy"], Model_XGB$byClass["Balanced Accuracy"], Model_SVM$byClass["Balanced Accuracy"], Model_NBM$byClass["Balanced Accuracy"], Model_KNN$byClass["Balanced Accuracy"])
+
+F1_Scores <- c(Model_GLM$byClass["F1"],Model_DT$byClass["F1"], model_RF$byClass["F1"], Model_XGB$byClass["F1"], Model_SVM$byClass["F1"], Model_NBM$byClass["F1"], Model_KNN$byClass["F1"])
+
+#Create a data frame for stat lists
+Models  <- c("DecisionTree", "RandomForest", "XGBoost", "SVM", "Logistic", "NaiveBaiyes", "KNN")
+StatComp <- data.frame(Models, Sensitivities, Specificities, Precisions, Recalls, F1_Scores, Accuracies, Balanced_Accuracies)
+# print table using knitr package
+knitr::kable(StatComp, digits = 5)  
+
+
+#######The End##########
